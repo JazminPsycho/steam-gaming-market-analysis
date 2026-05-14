@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steam Gaming Market Analysis 2026 | Jazmin Schürrer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --accent: #7c3aed;
+    --accent2: #06d6a0;
+    --accent3: #f72585;
+    --text: #e8e8f0;
+    --text2: #9090a8;
+    --border: rgba(124, 58, 237, 0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    margin-bottom: 48px;
+    animation: fadeDown 0.8s ease both;
+  }
+
+  .header-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .header h1 {
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 800;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+
+  .header-sub {
+    color: var(--text2);
+    font-size: 15px;
+    max-width: 600px;
+    line-height: 1.6;
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
+  .meta-item {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .meta-item span {
+    color: var(--accent2);
+  }
+
+  /* KPI Cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  .kpi-card:nth-child(2)::before { background: linear-gradient(90deg, var(--accent2), #0ea5e9); }
+  .kpi-card:nth-child(3)::before { background: linear-gradient(90deg, var(--accent3), var(--accent)); }
+  .kpi-card:nth-child(4)::before { background: linear-gradient(90deg, #f59e0b, var(--accent3)); }
+
+  .kpi-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text2);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .kpi-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .kpi-desc {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.4;
+  }
+
+  /* Charts grid */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .charts-grid.full { grid-template-columns: 1fr; }
+
+  @media (max-width: 768px) {
+    .charts-grid { grid-template-columns: 1fr; }
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    animation: fadeUp 0.7s ease both;
+  }
+
+  .chart-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .chart-subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text2);
+    margin-bottom: 24px;
+    letter-spacing: 1px;
+  }
+
+  .chart-wrapper {
+    position: relative;
+    height: 260px;
+  }
+
+  /* Insight cards */
+  .insights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .insight-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .insight-number {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 12px;
+    letter-spacing: 2px;
+  }
+
+  .insight-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .insight-text {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+
+  /* Recommendation */
+  .recommendation {
+    background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(6,214,160,0.1));
+    border: 1px solid rgba(124,58,237,0.4);
+    border-radius: 16px;
+    padding: 36px;
+    margin-bottom: 40px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.9s ease both;
+  }
+
+  .recommendation::before {
+    content: '→';
+    position: absolute;
+    right: 32px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 120px;
+    color: rgba(124,58,237,0.08);
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .rec-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent2);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .rec-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 16px;
+    max-width: 700px;
+  }
+
+  .rec-text {
+    font-size: 14px;
+    color: var(--text2);
+    line-height: 1.7;
+    max-width: 680px;
+  }
+
+  .rec-highlight {
+    color: var(--accent2);
+    font-weight: 700;
+  }
+
+  /* Genre table */
+  .table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text2);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--text);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .badge-high { background: rgba(6,214,160,0.15); color: var(--accent2); }
+  .badge-mid { background: rgba(124,58,237,0.15); color: #a78bfa; }
+  .badge-low { background: rgba(247,37,133,0.15); color: var(--accent3); }
+
+  .bar-mini {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    margin-top: 4px;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 32px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer p {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .footer a {
+    color: var(--accent2);
+    text-decoration: none;
+  }
+
+  /* Animations */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .kpi-card:nth-child(1) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(2) { animation-delay: 0.2s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.3s; }
+  .kpi-card:nth-child(4) { animation-delay: 0.4s; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-tag">// Portfolio Project 01 — Steam Market Analysis</div>
+    <h1>¿En qué género debería<br>entrar un estudio indie?</h1>
+    <p class="header-sub">Análisis de mercado basado en datos reales de 185.397 juegos de Steam para ayudar a un estudio indie a tomar la mejor decisión de género antes de desarrollar su primer juego.</p>
+    <div class="header-meta">
+      <div class="meta-item">Fuente: <span>SteamSpy API</span></div>
+      <div class="meta-item">Juegos analizados: <span>185.397</span></div>
+      <div class="meta-item">Fecha: <span>Mayo 2026</span></div>
+      <div class="meta-item">Analista: <span>Jazmin Schürrer</span></div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Juegos analizados</div>
+      <div class="kpi-value">185K</div>
+      <div class="kpi-desc">Datos reales de Steam en 6 géneros principales</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Género ganador</div>
+      <div class="kpi-value">RPG</div>
+      <div class="kpi-desc">Mayor índice de oportunidad: 7.48 pts</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Género a evitar</div>
+      <div class="kpi-value">Indie</div>
+      <div class="kpi-desc">52.781 juegos compitiendo. Saturación extrema.</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Nicho oculto</div>
+      <div class="kpi-value">Strategy</div>
+      <div class="kpi-desc">Alta oportunidad con menor competencia que Action</div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Propietarios promedio por género</div>
+      <div class="chart-subtitle">// DEMANDA DEL MERCADO</div>
+      <div class="chart-wrapper">
+        <canvas id="ownersChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Índice de oportunidad por género</div>
+      <div class="chart-subtitle">// DEMANDA / COMPETENCIA</div>
+      <div class="chart-wrapper">
+        <canvas id="opportunityChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Cantidad de juegos por género</div>
+      <div class="chart-subtitle">// NIVEL DE SATURACIÓN</div>
+      <div class="chart-wrapper">
+        <canvas id="competitionChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Oportunidad vs Competencia</div>
+      <div class="chart-subtitle">// MATRIZ DE DECISIÓN</div>
+      <div class="chart-wrapper">
+        <canvas id="matrixChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="chart-title" style="margin-bottom:4px">Resumen por género</div>
+    <div class="chart-subtitle">// DATOS COMPLETOS</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Género</th>
+          <th>Juegos</th>
+          <th>Owners promedio</th>
+          <th>Índice oportunidad</th>
+          <th>Recomendación</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>RPG</strong></td>
+          <td>17.095</td>
+          <td>
+            127.919
+            <div class="bar-mini" style="width:100%"></div>
+          </td>
+          <td>7.48</td>
+          <td><span class="badge badge-high">ENTRAR</span></td>
+        </tr>
+        <tr>
+          <td><strong>Strategy</strong></td>
+          <td>19.212</td>
+          <td>
+            105.051
+            <div class="bar-mini" style="width:82%"></div>
+          </td>
+          <td>5.47</td>
+          <td><span class="badge badge-high">ENTRAR</span></td>
+        </tr>
+        <tr>
+          <td><strong>Simulation</strong></td>
+          <td>19.424</td>
+          <td>
+            92.215
+            <div class="bar-mini" style="width:72%"></div>
+          </td>
+          <td>4.75</td>
+          <td><span class="badge badge-mid">EVALUAR</span></td>
+        </tr>
+        <tr>
+          <td><strong>Action</strong></td>
+          <td>39.142</td>
+          <td>
+            124.452
+            <div class="bar-mini" style="width:97%"></div>
+          </td>
+          <td>3.18</td>
+          <td><span class="badge badge-mid">EVALUAR</span></td>
+        </tr>
+        <tr>
+          <td><strong>Adventure</strong></td>
+          <td>37.743</td>
+          <td>
+            103.359
+            <div class="bar-mini" style="width:81%"></div>
+          </td>
+          <td>2.74</td>
+          <td><span class="badge badge-low">PRECAUCIÓN</span></td>
+        </tr>
+        <tr>
+          <td><strong>Indie (tag)</strong></td>
+          <td>52.781</td>
+          <td>
+            51.415
+            <div class="bar-mini" style="width:40%; background: linear-gradient(90deg, #f72585, #f72585)"></div>
+          </td>
+          <td>0.97</td>
+          <td><span class="badge badge-low">EVITAR</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Insights -->
+  <div class="insights-grid">
+    <div class="insight-card">
+      <div class="insight-number">// INSIGHT 01</div>
+      <div class="insight-title">RPG: alta demanda, menor saturación</div>
+      <div class="insight-text">Con 127.919 propietarios promedio y solo 17.095 juegos compitiendo, el RPG tiene el mejor ratio demanda/competencia del mercado. Un RPG narrativo con identidad latinoamericana clara tiene chances reales de destacar.</div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-number">// INSIGHT 02</div>
+      <div class="insight-title">Action engaña: mucha demanda, más competencia</div>
+      <div class="insight-text">Action parece atractivo por sus 124.452 owners promedio, pero compite con 39.142 juegos. Para un estudio sin presupuesto de marketing, entrar a Action sin diferencial claro es un error estratégico.</div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-number">// INSIGHT 03</div>
+      <div class="insight-title">Indie como tag no es una estrategia</div>
+      <div class="insight-text">El género Indie tiene el peor índice de oportunidad: 0.97. Con 52.781 juegos es el más saturado de todos. Ser indie es una descripción del estudio, no del juego. El género del juego importa más.</div>
+    </div>
+  </div>
+
+  <!-- Recommendation -->
+  <div class="recommendation">
+    <div class="rec-tag">// RECOMENDACIÓN FINAL</div>
+    <div class="rec-title">Si sos un estudio indie con recursos limitados, los datos hablan claro.</div>
+    <div class="rec-text">
+      No compitas en Action ni uses Indie como tu género principal. Los datos de 185.397 juegos de Steam muestran que <span class="rec-highlight">RPG y Strategy tienen la mejor relación entre demanda y competencia</span>. Un RPG narrativo o un juego de estrategia con identidad latinoamericana clara tiene más probabilidades de destacar que el shooter número 39.000 de Steam. La clave no es elegir el género más popular, sino el que mejor equilibra <span class="rec-highlight">demanda alta con competencia manejable</span>.
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Análisis realizado por <a href="https://linkedin.com/in/jazmin-sch">Jazmin Schürrer</a> · Datos: SteamSpy API · Mayo 2026</p>
+  </div>
+
+</div>
+
+<script>
+const chartDefaults = {
+  plugins: { legend: { display: false } },
+  scales: {
+    x: {
+      ticks: { color: '#9090a8', font: { size: 11 } },
+      grid: { color: 'rgba(255,255,255,0.04)' }
+    },
+    y: {
+      ticks: { color: '#9090a8', font: { size: 11 } },
+      grid: { color: 'rgba(255,255,255,0.04)' }
+    }
+  }
+};
+
+const genres = ['RPG', 'Action', 'Strategy', 'Adventure', 'Simulation', 'Indie'];
+const owners = [127919, 124452, 105051, 103359, 92215, 51415];
+const opportunity = [7.48, 3.18, 5.47, 2.74, 4.75, 0.97];
+const competition = [17095, 39142, 19212, 37743, 19424, 52781];
+
+const colors = ['#06d6a0', '#7c3aed', '#06d6a0', '#9090a8', '#a78bfa', '#f72585'];
+const oppColors = ['#06d6a0', '#a78bfa', '#06d6a0', '#9090a8', '#a78bfa', '#f72585'];
+
+// Owners chart
+new Chart(document.getElementById('ownersChart'), {
+  type: 'bar',
+  data: {
+    labels: genres,
+    datasets: [{ data: owners, backgroundColor: colors, borderRadius: 6 }]
+  },
+  options: { ...chartDefaults, responsive: true, maintainAspectRatio: false }
+});
+
+// Opportunity chart
+const oppSorted = [...opportunity];
+const genresSorted = [...genres];
+const combined = genres.map((g, i) => ({ g, o: opportunity[i] })).sort((a, b) => b.o - a.o);
+
+new Chart(document.getElementById('opportunityChart'), {
+  type: 'bar',
+  data: {
+    labels: combined.map(x => x.g),
+    datasets: [{ data: combined.map(x => x.o), backgroundColor: ['#06d6a0','#06d6a0','#a78bfa','#a78bfa','#9090a8','#f72585'], borderRadius: 6 }]
+  },
+  options: { ...chartDefaults, responsive: true, maintainAspectRatio: false }
+});
+
+// Competition chart
+new Chart(document.getElementById('competitionChart'), {
+  type: 'bar',
+  data: {
+    labels: genres,
+    datasets: [{ data: competition, backgroundColor: ['#06d6a0','#f72585','#06d6a0','#f72585','#a78bfa','#f72585'], borderRadius: 6 }]
+  },
+  options: { ...chartDefaults, responsive: true, maintainAspectRatio: false }
+});
+
+// Matrix scatter chart
+new Chart(document.getElementById('matrixChart'), {
+  type: 'scatter',
+  data: {
+    datasets: genres.map((g, i) => ({
+      label: g,
+      data: [{ x: competition[i], y: owners[i] }],
+      backgroundColor: colors[i],
+      pointRadius: 10,
+      pointHoverRadius: 14
+    }))
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        labels: { color: '#9090a8', font: { size: 11 }, boxWidth: 10 }
+      },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label}: ${ctx.parsed.x.toLocaleString()} juegos, ${ctx.parsed.y.toLocaleString()} owners`
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: 'Competencia (juegos)', color: '#9090a8', font: { size: 11 } },
+        ticks: { color: '#9090a8', font: { size: 10 } },
+        grid: { color: 'rgba(255,255,255,0.04)' }
+      },
+      y: {
+        title: { display: true, text: 'Demanda (owners promedio)', color: '#9090a8', font: { size: 11 } },
+        ticks: { color: '#9090a8', font: { size: 10 } },
+        grid: { color: 'rgba(255,255,255,0.04)' }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
