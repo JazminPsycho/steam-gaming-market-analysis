@@ -51,9 +51,10 @@ que ya las tiene.
 | `0004_finanzas_registros.sql` | `reg_movimientos`, `reg_impacto`, `reg_acuerdos`, `reg_acuerdo_cuotas`, `reg_presupuesto` |
 | `0005_auditoria.sql` | `auditoria.log_cambios` + triggers |
 | `0006_vistas_reporte.sql` | 9 vistas de reporte y control |
-| `0007_rls_grants_revoke_delete.sql` | RLS en 18 tablas, 56 políticas, `REVOKE DELETE` |
+| `0007_rls_grants_revoke_delete.sql` | RLS en 18 tablas, políticas por rol, `REVOKE DELETE` |
 | `0008_semilla_catalogos.sql` | árbol de categorías, plan PCGE borrador, cuentas, métodos, departamentos |
 | `0009_datos_prueba.sql` | 100 filas de registro de prueba |
+| `0010_afinado_indices_politicas.sql` | índice que cubre la FK compuesta y unificación de las políticas de UPDATE |
 
 ## Paso manual obligatorio
 
@@ -104,7 +105,7 @@ una clave de servicio filtrada no puede borrar historia financiera. El único ca
 queda es el owner `postgres` desde el Studio, que es exactamente el modelo del documento — nadie en
 la organización de Supabase salvo el CEO. `ALTER DEFAULT PRIVILEGES` deja las tablas futuras igual.
 
-**RLS.** 56 políticas resueltas por `finanzas.rol_actual()`. La anulación es la única vía de baja, y
+**RLS.** 51 políticas resueltas por `finanzas.rol_actual()`. La anulación es la única vía de baja, y
 la política de UPDATE de los roles no-admin exige `estado = 'activo'` en `USING` y en `WITH CHECK`:
 no pueden anular ni reactivar.
 
@@ -127,7 +128,7 @@ delata un cambio hecho desde el Studio, que pasa por encima de RLS. Un `UPDATE` 
 - un presupuesto con `congelado_en` puesto no admite edición de montos ni de llaves: los cambios
   entran como versiones nuevas
 
-Para comprobar que todo esto sigue en pie: `scripts/verificar_protecciones.sql`. Son 15 pruebas y
+Para comprobar que todo esto sigue en pie: `scripts/verificar_protecciones.sql`. Son 17 pruebas y
 todas deben decir `PASA`.
 
 ## Vistas
