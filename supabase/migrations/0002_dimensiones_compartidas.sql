@@ -10,6 +10,53 @@
 -- después cuesta caro (sección "Dashboards futuros").
 -- =====================================================================
 
+-- ---------------------------------------------------------------------
+-- GUARDA · esta migración asume que ella crea public.eventos.
+--
+-- Sobre un proyecto que ya tiene la tabla (la landing en producción),
+-- "create table if not exists" NO falla: se saltea en silencio. Las
+-- fallas aparecen después y dispersas — los índices, el trigger, la
+-- vista finanzas.cat_eventos, las llaves foráneas de 0004 y los eventos
+-- de 0009 — y para entonces ya hay objetos a medio crear.
+--
+-- Mejor parar acá con el diagnóstico en la mano. En un proyecto vacío
+-- esto no hace nada.
+-- ---------------------------------------------------------------------
+do $guarda$
+declare
+  v_tipo   text;
+  v_faltan text[];
+begin
+  if to_regclass('public.eventos') is null then
+    return;   -- proyecto vacío: sigue el camino normal
+  end if;
+
+  select format_type(a.atttypid, a.atttypmod) into v_tipo
+  from pg_attribute a
+  where a.attrelid = 'public.eventos'::regclass
+    and a.attname = 'id' and a.attnum > 0 and not a.attisdropped;
+
+  select array_agg(c order by c) into v_faltan
+  from unnest(array['nombre','slug','descripcion','juego','nivel','region','ciclo',
+                    'modalidad','fecha_inicio','fecha_fin','estado','publicado',
+                    'url_publica','creado_en','actualizado_en']) as c
+  where not exists (
+    select 1 from pg_attribute
+     where attrelid = 'public.eventos'::regclass
+       and attname = c and attnum > 0 and not attisdropped
+  );
+
+  if v_tipo is distinct from 'text' or v_faltan is not null then
+    raise exception using
+      message = 'public.eventos ya existe y no tiene la forma que espera el schema finanzas',
+      detail  = format('id es de tipo %s (se espera text). Columnas faltantes: %s.',
+                       coalesce(v_tipo, '?'),
+                       coalesce(array_to_string(v_faltan, ', '), 'ninguna')),
+      hint    = 'Correr supabase/scripts/inspeccionar_destino.sql y adaptar esta migración antes de continuar. No cambiar el tipo de la clave primaria de una tabla en producción: adaptar las llaves foráneas de finanzas al tipo nativo y agregar una columna codigo text unique para el identificador legible.';
+  end if;
+end;
+$guarda$;
+
 create table if not exists public.eventos (
   id              text primary key
                     check (id = 'EVT-GENERAL' or id ~ '^EVT-[0-9]{4}-[0-9]{3}$'),
