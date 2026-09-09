@@ -250,13 +250,37 @@ comment on table finanzas.cat_campanas is
   'agrega en esa fase: el listado de campos de REG_MOVIMIENTOS está cerrado en el documento v1.';
 
 -- ---------------------------------------------------------------------
+-- EVENTOS_ATRIBUTOS · lo que finanzas necesita de un evento y la tabla
+-- de la landing no tiene.
+--
+-- Extensión 1:1 de public.eventos. Existe para no agregarle columnas de
+-- finanzas a la tabla que sirve el sitio: cada schema dueño de lo suyo,
+-- y la llave foránea real intacta.
+-- ---------------------------------------------------------------------
+create table finanzas.eventos_atributos (
+  evento_id       text primary key
+                    references public.eventos (id) on update cascade on delete restrict,
+  nivel           text check (nivel is null or nivel in ('casual','comunidad','competitivo','profesional','N/A')),
+  region          text check (region is null or region in ('PE','LATAM','AR','CL','CO','MX','GLOBAL','N/A')),
+  ciclo           text,
+  modalidad       text check (modalidad is null or modalidad in ('online','presencial','hibrido')),
+  notas           text,
+  creado_en       timestamptz not null default now(),
+  actualizado_en  timestamptz not null default now()
+);
+comment on table finanzas.eventos_atributos is
+  'Atributos de gestión de un evento: nivel, región, ciclo y modalidad. La landing no los necesita, así que viven acá. Se leen a través de finanzas.cat_eventos.';
+comment on column finanzas.eventos_atributos.ciclo is
+  'Ciclo o temporada competitiva, alineado con public.dim_tiempo.ciclo.';
+
 -- Timestamps de catálogo
 -- ---------------------------------------------------------------------
 do $$
 declare t text;
 begin
   foreach t in array array['cat_fondos','cat_cuentas','cat_metodos','cat_departamentos',
-                           'cat_pcge','cat_contrapartes','cat_items','cat_campanas','usuarios']
+                           'cat_pcge','cat_contrapartes','cat_items','cat_campanas',
+                           'eventos_atributos','usuarios']
   loop
     execute format(
       'create trigger tg_%1$s_actualizado before update on finanzas.%1$s
@@ -266,15 +290,93 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
--- CAT_EVENTOS · vista sobre la dimensión maestra, no una copia.
--- security_invoker = true para que la RLS de public.eventos siga aplicando.
--- Es auto-actualizable: admite INSERT y UPDATE como si fuera tabla.
+-- CAT_EVENTOS · la vista es el adaptador.
+--
+-- Contrato de salida fijo (18 columnas) sea cual sea la forma real de
+-- public.eventos, así que las vistas de reporte de 0006 no se enteran de
+-- en qué mundo están.
+--
+-- En el mundo de la landing hay que traducir y derivar:
+--     titulo                      -> nombre
+--     inicio                      -> fecha_inicio
+--     inicio + duracion_horas     -> fecha_fin
+--     not oculto                  -> publicado
+--     coalesce(url, enlace)       -> url_publica
+--     inicio y duracion_horas     -> estado
+--
+-- Las fechas se convierten a hora de Lima a propósito: el comentario de
+-- la columna `inicio` dice que la portada la pinta siempre en hora de
+-- Lima, y las fechas del P&L tienen que coincidir con las que ve la
+-- gente. Un evento que arranca 02:00 UTC es del día anterior en Perú.
+--
+-- security_invoker = true: la RLS de public.eventos sigue aplicando. Por
+-- eso 0007 agrega una política aditiva que deja al panel financiero ver
+-- también los eventos ocultos (EVT-GENERAL es uno).
 -- ---------------------------------------------------------------------
-create view finanzas.cat_eventos with (security_invoker = true) as
-select id, nombre, slug, descripcion, juego, nivel, region, ciclo, modalidad,
-       fecha_inicio, fecha_fin, estado, publicado, url_publica
-from public.eventos;
+do $vista$
+begin
+  if exists (
+    select 1 from pg_attribute
+     where attrelid = 'public.eventos'::regclass
+       and attname = 'nombre' and attnum > 0 and not attisdropped
+  ) then
+    -- Mundo A · la tabla ya tiene la forma de finanzas
+    execute $va$
+      create view finanzas.cat_eventos with (security_invoker = true) as
+      select e.id,
+             e.nombre,
+             e.descripcion,
+             e.juego,
+             coalesce(a.nivel,     e.nivel)     as nivel,
+             coalesce(a.region,    e.region)    as region,
+             coalesce(a.ciclo,     e.ciclo)     as ciclo,
+             coalesce(a.modalidad, e.modalidad) as modalidad,
+             e.fecha_inicio,
+             e.fecha_fin,
+             e.estado,
+             e.publicado,
+             e.url_publica,
+             null::text    as serie,
+             null::text    as tipo,
+             null::text    as subtitulo,
+             false         as destacado,
+             false         as esports
+      from public.eventos e
+      left join finanzas.eventos_atributos a on a.evento_id = e.id
+    $va$;
+  else
+    -- Mundo B · la tabla de la landing
+    execute $vb$
+      create view finanzas.cat_eventos with (security_invoker = true) as
+      select e.id,
+             e.titulo                                   as nombre,
+             e.descripcion,
+             e.juego,
+             a.nivel,
+             a.region,
+             a.ciclo,
+             a.modalidad,
+             (e.inicio at time zone 'America/Lima')::date                             as fecha_inicio,
+             ((e.inicio + make_interval(hours => e.duracion_horas))
+                at time zone 'America/Lima')::date                                    as fecha_fin,
+             case
+               when now() <  e.inicio then 'planificado'
+               when now() <  e.inicio + make_interval(hours => e.duracion_horas) then 'en_curso'
+               else 'finalizado'
+             end                                        as estado,
+             not e.oculto                               as publicado,
+             coalesce(e.url, e.enlace)                  as url_publica,
+             e.serie,
+             e.tipo,
+             e.subtitulo,
+             e.destacado,
+             e.esports
+      from public.eventos e
+      left join finanzas.eventos_atributos a on a.evento_id = e.id
+    $vb$;
+  end if;
+end;
+$vista$;
 
 comment on view finanzas.cat_eventos is
-  'CAT_EVENTOS del modelo de datos. Vista sobre public.eventos para no duplicar la dimensión maestra: '
-  'las llaves foráneas apuntan a public.eventos.id directamente.';
+  'CAT_EVENTOS del modelo de datos. Adaptador sobre public.eventos: traduce los nombres reales de la tabla y junta los atributos de gestión de finanzas.eventos_atributos. No duplica la dimensión maestra, así que las llaves foráneas siguen apuntando a public.eventos.id.';

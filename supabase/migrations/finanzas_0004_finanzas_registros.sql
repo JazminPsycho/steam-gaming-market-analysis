@@ -148,7 +148,6 @@ create index ix_mov_fecha_prevista on finanzas.reg_movimientos (fecha_prevista);
 create index ix_mov_fecha_efectiva on finanzas.reg_movimientos (fecha_efectiva);
 create index ix_mov_evento         on finanzas.reg_movimientos (evento_id);
 create index ix_mov_depto          on finanzas.reg_movimientos (depto_id);
-create index ix_mov_categoria      on finanzas.reg_movimientos (categoria_id);
 create index ix_mov_contraparte    on finanzas.reg_movimientos (contraparte_id);
 create index ix_mov_atribuido      on finanzas.reg_movimientos (atribuido_a_id);
 create index ix_mov_fondo          on finanzas.reg_movimientos (fondo_id);

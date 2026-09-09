@@ -120,15 +120,9 @@ create policy upd_reg_presupuesto on finanzas.reg_presupuesto
   );
 
 -- ---------------------------------------------------------------------
--- public.eventos conserva sus dos políticas de SELECT a propósito.
+-- public.eventos no aparece acá.
 --
--- No se pueden unificar: anon no tiene USAGE sobre el schema finanzas,
--- así que no puede resolver finanzas.rol_actual(). Una política única
--- "to anon, authenticated" que llamara a esa función rompería la landing
--- con un error de permisos. La política de anon se queda sin llamadas a
--- funciones, y la interna es solo "to authenticated".
+-- 0007 le agrega una sola política aditiva y no toca las suyas, así que
+-- no hay dos políticas permisivas de finanzas que unificar. Y las que
+-- pertenecen a la landing no son nuestras para optimizar.
 -- ---------------------------------------------------------------------
-comment on policy sel_eventos_publicados on public.eventos is
-  'Solo lo publicado, sin llamar a ninguna función: anon no puede resolver nada del schema finanzas.';
-comment on policy sel_eventos_internos on public.eventos is
-  'Visión completa para quien tiene rol de aplicación. Separada de la anterior por el límite de anon.';

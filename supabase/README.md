@@ -12,49 +12,88 @@ Implementa los pasos 3, 4 y 5 de la hoja de ruta del documento de traspaso v1.
 
 | | |
 |---|---|
-| Proyecto Supabase | **Somos Trufas** · ref `pesflecdjypuzdcotgxn` |
-| Región | us-west-2 |
-| Motor | Postgres 17.6 |
+| Organización | **Somos Trufas** (`vevwiyhitzjoomksnclt`) — plan Free |
+| Proyecto | **`Website`** · ref `tpcbzddxwqypvckvvbfa` |
+| Región | us-east-2 · Postgres 17.6 |
 
-> El documento de traspaso apunta a un proyecto distinto (`Website`, ref `tpcbzddxwqypvckvvbfa`,
-> us-east-2, con `public.eventos` ya poblado). Ese proyecto no está en esta cuenta, así que el
-> sistema se construyó aquí y `public.eventos` se creó desde cero. Si la landing termina viviendo en
-> otro proyecto, los eventos existentes se traen con un `INSERT`: la estructura no cambia.
+Es el mismo proyecto que sirve **somostrufas.org**. Eso es deliberado y es la decisión que sostiene
+todo el diseño: en Supabase cada proyecto es una instancia Postgres aislada y **no existen llaves
+foráneas entre proyectos**. Separar finanzas convertiría `evento_id` en un número copiado a mano.
+La relación `finanzas.reg_movimientos.evento_id → public.eventos.id` es una llave foránea real.
 
 ## Arquitectura
 
 ```
-Somos Trufas  (proyecto Supabase)
+Website  (proyecto Supabase)
 │
-├── public       eventos, dim_tiempo        ← dimensiones compartidas
-├── finanzas     10 catálogos + 5 registros ← esta fase
-├── auditoria    log de cambios             ← esta fase
-├── metricas     redes y comunidad          ← fase 2
-└── desempeno    KPIs por cargo             ← fase 3
+├── public       eventos (la landing) + dim_tiempo   ← dimensiones compartidas
+├── finanzas     11 catálogos + 5 registros + 9 vistas
+├── auditoria    log de cambios, append-only
+├── metricas     redes y comunidad                   ← fase 2
+└── desempeno    KPIs por cargo                      ← fase 3
 ```
 
-Un solo proyecto, separación por schemas. En Supabase cada proyecto es una instancia Postgres
-aislada y **no existen llaves foráneas entre proyectos**: separar finanzas convertiría `evento_id` en
-un número copiado a mano. La relación `finanzas.reg_movimientos.evento_id → public.eventos.id` es una
-llave foránea real, y esa es la razón de fondo para no partir el proyecto en dos.
+## Cómo se relaciona finanzas con la tabla de la landing
+
+**Esto es lo menos obvio del diseño. Leerlo antes de tocar nada.**
+
+`public.eventos` **es de la landing y no se rediseñó.** Tiene 28 columnas con su propia semántica,
+pensada y comentada: i18n (`titulo_en`, `descripcion_en`, `subtitulo_en`), `serie` para agrupar
+ediciones recurrentes, `destacado`, `tipo` (sorteo / torneo / transmisión), y `home` y `esports` como
+dos parrillas independientes. Imponerle las columnas de finanzas habría duplicado información que ya
+existe con otro nombre y ensuciado la tabla que sirve el sitio.
+
+**Finanzas se adapta a ella, no al revés.** Tres piezas:
+
+**1 · `finanzas.cat_eventos` es el adaptador.** Una vista que traduce y deriva:
+
+| La landing tiene | finanzas lee |
+|---|---|
+| `titulo` | `nombre` |
+| `inicio` (timestamptz) | `fecha_inicio` — **convertido a hora de Lima** |
+| `inicio + duracion_horas` | `fecha_fin` |
+| `oculto` | `publicado` (invertido) |
+| `inicio` y `duracion_horas` | `estado`: planificado / en_curso / finalizado |
+| `url` o `enlace` | `url_publica` |
+
+La hora de Lima no es un detalle estético. El comentario de la columna `inicio` dice que la portada
+la pinta siempre en hora de Lima, y las fechas del P&L tienen que coincidir con las que ve la gente.
+Un evento que arranca 02:00 UTC es del día anterior en Perú: el karaoke cuyo slug dice
+`noche-de-karaoke-2026-08-26` arranca `2026-08-27 02:00+00`, y la vista lo reporta el **26**, que es
+lo que dice su propio nombre.
+
+El contrato de salida de la vista (18 columnas) es fijo, así que las vistas de reporte no dependen de
+la forma real de la tabla. La definición del cuerpo sí: se crea desde un bloque que elige entre dos
+formas, la de la landing y la de un proyecto vacío. La misma migración funciona en los dos casos.
+
+**2 · `finanzas.eventos_atributos` guarda lo que finanzas necesita y la landing no tiene.** Nivel,
+región, ciclo y modalidad. Extensión 1:1 con `evento_id` como clave primaria y llave foránea. Cada
+schema dueño de lo suyo.
+
+**3 · `EVT-GENERAL` es una fila oculta en `public.eventos`.** Es la única escritura que el sistema
+financiero hizo sobre la tabla de la landing, y va con `oculto = true`, `home = false` y
+`esports = false`: no aparece en la portada ni en el portal de esports, y la política de lectura
+pública (`oculto = false`) hace que `anon` no la vea siquiera. Tiene que existir porque la regla no
+negociable del documento dice que toda fila lleva `evento_id`, aunque sea GENERAL — sin ella, el P&L
+se queda sin la bolsa de lo estructural (contabilidad, hosting, tributos, comisiones).
 
 ## Migraciones
 
-Se aplican en orden. Cada una es idempotente solo respecto de sí misma: no reejecutar sobre una base
-que ya las tiene.
+Llevan prefijo `finanzas_` para distinguirlas en el historial del proyecto, donde también están las
+de la landing (`04_home_seccion_portada`, `05_subtitulo_tarjeta`).
 
 | Archivo | Qué crea |
 |---|---|
-| `0001_schemas_tipos_roles.sql` | schemas, 16 enums, `finanzas.usuarios`, helpers de rol, trigger de sello |
-| `0002_dimensiones_compartidas.sql` | `public.eventos`, `public.dim_tiempo` (2024-2030), fila `EVT-GENERAL` |
-| `0003_finanzas_catalogos.sql` | 9 catálogos + vista `cat_eventos` |
-| `0004_finanzas_registros.sql` | `reg_movimientos`, `reg_impacto`, `reg_acuerdos`, `reg_acuerdo_cuotas`, `reg_presupuesto` |
-| `0005_auditoria.sql` | `auditoria.log_cambios` + triggers |
-| `0006_vistas_reporte.sql` | 9 vistas de reporte y control |
-| `0007_rls_grants_revoke_delete.sql` | RLS en 18 tablas, políticas por rol, `REVOKE DELETE` |
-| `0008_semilla_catalogos.sql` | árbol de categorías, plan PCGE borrador, cuentas, métodos, departamentos |
-| `0009_datos_prueba.sql` | 100 filas de registro de prueba |
-| `0010_afinado_indices_politicas.sql` | índice que cubre la FK compuesta y unificación de las políticas de UPDATE |
+| `finanzas_0001_schemas_tipos_roles.sql` | schemas, 16 enums, `finanzas.usuarios`, helpers de rol, trigger de sello |
+| `finanzas_0002_dimensiones_compartidas.sql` | `dim_tiempo` (2024-2030), la fila `EVT-GENERAL`, y **no toca** `public.eventos` |
+| `finanzas_0003_finanzas_catalogos.sql` | 10 catálogos, `eventos_atributos` y la vista adaptadora `cat_eventos` |
+| `finanzas_0004_finanzas_registros.sql` | `reg_movimientos`, `reg_impacto`, `reg_acuerdos`, `reg_acuerdo_cuotas`, `reg_presupuesto` |
+| `finanzas_0005_auditoria.sql` | `auditoria.log_cambios` + triggers |
+| `finanzas_0006_vistas_reporte.sql` | 9 vistas de reporte y control |
+| `finanzas_0007_rls_grants_revoke_delete.sql` | RLS en 19 tablas, políticas por rol, `REVOKE DELETE` |
+| `finanzas_0008_semilla_catalogos.sql` | árbol de categorías, plan PCGE borrador, cuentas, métodos, departamentos |
+| `finanzas_0009_datos_prueba.sql` | 100 filas de registro de prueba, sobre los eventos reales |
+| `finanzas_0010_afinado_indices_politicas.sql` | índice que cubre la FK compuesta y unificación de las políticas de UPDATE |
 
 ## Paso manual obligatorio
 
@@ -63,7 +102,7 @@ leer ni escribir nada por PostgREST, aunque los permisos de base de datos estén
 
 > Dashboard → Project Settings → API → **Exposed schemas** → añadir `finanzas`
 
-No añadir `auditoria`: el log se consulta desde el Studio o por una vista específica si hace falta.
+No añadir `auditoria`: el log se consulta desde el Studio.
 
 ## Arrancar el primer admin
 
@@ -78,7 +117,7 @@ insert into finanzas.usuarios (id, nombre, email, rol, depto_id)
 values ('<uuid de auth.users>', 'Sergio', 'ceo@somostrufas.org', 'admin', 'DEP-DIRECCION');
 ```
 
-De ahí en adelante el admin gestiona los demás usuarios desde el panel.
+Hoy hay **0 usuarios** en Auth. De ahí en adelante el admin gestiona los demás desde el panel.
 
 Alternativa de respaldo: `finanzas.rol_actual()` también lee el claim `app_metadata.rol` del JWT, así
 que un rol puede asignarse desde Auth sin fila en `finanzas.usuarios`. La fila es preferible porque
@@ -105,7 +144,7 @@ una clave de servicio filtrada no puede borrar historia financiera. El único ca
 queda es el owner `postgres` desde el Studio, que es exactamente el modelo del documento — nadie en
 la organización de Supabase salvo el CEO. `ALTER DEFAULT PRIVILEGES` deja las tablas futuras igual.
 
-**RLS.** 51 políticas resueltas por `finanzas.rol_actual()`. La anulación es la única vía de baja, y
+**RLS** en 19 tablas, resuelta por `finanzas.rol_actual()`. La anulación es la única vía de baja, y
 la política de UPDATE de los roles no-admin exige `estado = 'activo'` en `USING` y en `WITH CHECK`:
 no pueden anular ni reactivar.
 
@@ -128,8 +167,11 @@ delata un cambio hecho desde el Studio, que pasa por encima de RLS. Un `UPDATE` 
 - un presupuesto con `congelado_en` puesto no admite edición de montos ni de llaves: los cambios
   entran como versiones nuevas
 
-Para comprobar que todo esto sigue en pie: `scripts/verificar_protecciones.sql`. Son 17 pruebas y
-todas deben decir `PASA`.
+Para comprobar que todo esto sigue en pie: `scripts/verificar_protecciones.sql`. Son **18 pruebas** y
+todas deben decir `PASA`. Incluye controles positivos, porque una protección que bloquea a todos no
+es una protección sino un muro: verifica que el admin **sí** anula y que finanzas **sí** aprueba
+presupuesto. Los ids se derivan de los datos, así que el script corre en cualquier proyecto donde
+esté instalado el sistema.
 
 ## Vistas
 
@@ -151,17 +193,73 @@ exponer datos es una decisión de publicación, no de esquema.
 
 ## Datos de prueba
 
-`0009` carga 100 filas de registro (55 movimientos, 14 impacto, 8 acuerdos, 13 cuotas, 10
-presupuesto) más 8 eventos y 20 contrapartes de apoyo. Todo marcado con `[PRUEBA]` en `descripcion`
-o `notas`.
+`finanzas_0009` carga 100 filas de registro (55 movimientos, 14 impacto, 8 acuerdos, 13 cuotas, 10
+presupuesto) y 20 contrapartes ficticias. Todo marcado con `[PRUEBA]`.
+
+**No inserta eventos**: usa los 13 reales de la landing, porque meter eventos ficticios los
+publicaría en la portada del sitio. Los movimientos se reparten sobre el `circuito-trufas-2026-3`
+(el torneo, con contratos comprometidos y premios proyectados), los cuatro sorteos y las ocho noches
+de comunidad, más `EVT-GENERAL` para lo estructural.
 
 Cubren los casos que rompen los reportes si están mal: canjes emparejados y uno suelto, puente
-Binance a banco y dos operaciones sobre el umbral sin puente, activo fijo por encima y por debajo del
-corte de la UIT, moneda extranjera con tipo de cambio, los tres estados de flujo, dos movimientos
-anulados, impacto que no pasa por caja, e impacto sin evidencia que por eso no es publicable.
+Binance a banco y tres operaciones sobre el umbral sin puente, activo fijo por encima y por debajo
+del corte de la UIT, moneda extranjera con tipo de cambio, los tres estados de flujo, dos
+movimientos anulados, impacto que no pasa por caja, e impacto sin evidencia que por eso no es
+publicable.
 
-Para purgarlos: `scripts/purgar_datos_prueba.sql`, como owner. Trae `rollback` al final: revisar los
-conteos y cambiarlo por `commit`.
+Para purgarlos: `scripts/purgar_datos_prueba.sql`, como owner. **No borra eventos** — los eventos son
+de la landing. Trae `rollback` al final: revisar los conteos y cambiarlo por `commit`.
+
+## Respaldo
+
+`respaldos/eventos_website_2026-09-09.sql` tiene las 13 filas de `public.eventos` tal como estaban
+antes de instalar el sistema. El plan Free no incluye backups, así que ese archivo es el único
+respaldo de esa tabla en ese momento. Se verificó fila por fila contra la tabla viva comparando una
+huella md5 sobre 22 campos: las 13 coinciden. Los datos van como JSON y se reponen con
+`jsonb_populate_recordset`, así que los tipos los resuelve la definición de la tabla y ningún literal
+mal formateado puede corromper una fila.
+
+## Hallazgos de seguridad, para tratar aparte
+
+Encontrados al instalar. **Ninguno es del sistema financiero**: son de la landing, y quedan acá
+documentados en lugar de arreglados de rondón, porque cambiar permisos de la tabla que sirve el sitio
+merece su propia ventana.
+
+**1 · `anon` tiene privilegios amplios sobre `public.eventos`.** `DELETE`, `INSERT`, `UPDATE` y
+`TRUNCATE`, que son los grants por defecto del schema `public` de Supabase. Hoy la RLS contiene los
+tres primeros, porque la única política es de `SELECT`. Pero **`TRUNCATE` pasa por encima de la
+RLS**: no es alcanzable por la API REST, así que no es una urgencia, pero es un privilegio que nadie
+usa sobre la tabla que sirve la portada.
+
+```sql
+-- Revisar primero que nada del sitio escriba con la clave anon.
+revoke insert, update, delete, truncate on public.eventos from anon;
+```
+
+**2 · `public.rls_auto_enable()` figura como `SECURITY DEFINER` invocable por `anon`.** Es un falso
+positivo en la práctica: devuelve `event_trigger`, y Postgres no permite llamar esas funciones como
+RPC. Revocar el `EXECUTE` sobrante es higiene, no urgencia.
+
+```sql
+revoke execute on function public.rls_auto_enable() from anon, authenticated;
+```
+
+Vale la pena saber qué hace: activa RLS automáticamente en cualquier tabla nueva de `public`. Es una
+buena pieza de quien montó la landing, y es la razón por la que las tablas de este sistema nacieron
+protegidas.
+
+**3 · `public.tocar_actualizado` tiene `search_path` mutable.** Cuerpo trivial
+(`new.actualizado = now()`), riesgo bajo, arreglo de una línea:
+
+```sql
+alter function public.tocar_actualizado() set search_path = '';
+```
+
+**4 · Dos políticas de SELECT en `public.eventos` — esto NO se debe "optimizar".** El linter de
+rendimiento lo marca como WARN, pero es deliberado: `lectura publica de eventos visibles` (de la
+landing) y `sel_eventos_finanzas` (aditiva, del panel) no se pueden unificar. La de la landing no
+debe llamar a `finanzas.rol_actual()`, porque `anon` no tiene `USAGE` sobre el schema `finanzas` y
+una política única rompería la portada con un error de permisos.
 
 ## Pendiente del documento
 
@@ -170,7 +268,8 @@ Lo que esta fase **no** cubre, en el orden de la hoja de ruta:
 1. **Contratar contador** — prioridad cero. Sigue sin resolver, y las obligaciones mensuales del
    Régimen MYPE Tributario se acumulan como omisiones.
 2. **Worker de backup** hacia R2 y **worker de keep-alive.** El plan free no trae respaldos y el
-   proyecto se pausa a los siete días sin actividad.
+   proyecto se pausa a los siete días sin actividad. Con la landing en vivo la pausa es menos
+   probable, pero el backup sigue faltando.
 3. **Validación del plan de cuentas** y llenado de `cuenta_pcge`.
 4. **Dashboards internos** en `admin.somostrufas.org`.
 5. **Informe público de transparencia** en `/transparencia`.
@@ -197,18 +296,27 @@ select cuenta, denominacion, notas from finanzas.cat_pcge where en_disputa order
 `cuenta_pcge` admite nulo a propósito: el panel funciona mientras esto se resuelve, y rellenarlo
 después no obliga a migrar datos.
 
-Dos temas fiscales adicionales que el documento deja abiertos y que conviene llevar a la primera
-reunión: el **cobro por Binance y PayPal** (ninguno es Empresa del Sistema Financiero supervisada por
-la SBS, así que los gastos asociados podrían ser reparados — `v_alertas_bancarizacion` lista los
-casos) y la **facturación de los canjes ya realizados**, que en Perú son permutas y generan IGV sin
-generar efectivo.
+Dos temas fiscales adicionales para la primera reunión: el **cobro por Binance y PayPal** (ninguno es
+Empresa del Sistema Financiero supervisada por la SBS, así que los gastos asociados podrían ser
+reparados — `v_alertas_bancarizacion` lista los casos) y la **facturación de los canjes ya
+realizados**, que en Perú son permutas y generan IGV sin generar efectivo — `v_canjes_sin_pareja`
+lista los que están sin facturar.
 
 Nada de este documento constituye asesoría tributaria.
 
-## Nombres por confirmar
+## Cabos sueltos
 
-Los departamentos se sembraron con una propuesta, porque el documento dice «los cinco del
-organigrama» sin listarlos: `DEP-DIRECCION`, `DEP-FINANZAS`, `DEP-OPERACIONES`, `DEP-MARKETING`,
-`DEP-ESPORTS`, más `DEP-GENERAL` para lo no imputable. Corregir los nombres es un `UPDATE`; cambiar
-los identificadores cascadea por las llaves foráneas, así que conviene fijarlos antes de cargar datos
+**El schema `sistema_finanzas` existe y está vacío** (sin tablas, vistas, funciones ni tipos). No se
+tocó. Si fue un intento previo del prototipo del panel contable, se puede borrar con
+`drop schema sistema_finanzas;` — confirmar antes que nadie lo esté usando.
+
+**Hubo una instalación previa en el proyecto equivocado.** El sistema se construyó primero en
+`pesflecdjypuzdcotgxn`, un proyecto llamado «Somos Trufas» que vive en la organización **Jazruka**.
+Esa base quedó con datos de prueba que parecen reales. Conviene pausarla o borrarla desde el
+dashboard de esa organización para que nadie cargue movimientos ahí.
+
+**Nombres de departamentos por confirmar.** Se sembraron con una propuesta, porque el documento dice
+«los cinco del organigrama» sin listarlos: `DEP-DIRECCION`, `DEP-FINANZAS`, `DEP-OPERACIONES`,
+`DEP-MARKETING`, `DEP-ESPORTS`, más `DEP-GENERAL`. Corregir los nombres es un `UPDATE`; cambiar los
+identificadores cascadea por las llaves foráneas, así que conviene fijarlos antes de cargar datos
 reales.

@@ -32,6 +32,7 @@ alter table finanzas.cat_categorias         enable row level security;
 alter table finanzas.cat_contrapartes       enable row level security;
 alter table finanzas.cat_items              enable row level security;
 alter table finanzas.cat_campanas           enable row level security;
+alter table finanzas.eventos_atributos      enable row level security;
 alter table finanzas.reg_movimientos        enable row level security;
 alter table finanzas.reg_impacto            enable row level security;
 alter table finanzas.reg_acuerdos           enable row level security;
@@ -43,24 +44,30 @@ alter table auditoria.log_cambios           enable row level security;
 -- 2 · Dimensiones compartidas en public
 -- ---------------------------------------------------------------------
 
--- La landing lee los eventos publicados sin autenticarse.
-create policy sel_eventos_publicados on public.eventos
-  for select to anon, authenticated
-  using (publicado);
-
--- Con rol de aplicación se ve todo, publicado o no.
-create policy sel_eventos_internos on public.eventos
+-- ---------------------------------------------------------------------
+-- public.eventos · UNA SOLA política, y puramente aditiva.
+--
+-- Cuando la tabla es la de la landing en producción, sus políticas y sus
+-- grants NO se tocan: lo que ya sirve el sitio se queda como está. Esta
+-- migración solo AGREGA la política que el panel financiero necesita.
+--
+-- Hace falta porque finanzas.cat_eventos es security_invoker: sin ella,
+-- el panel vería únicamente los eventos visibles y se perdería
+-- EVT-GENERAL, que está oculta a propósito. Sin EVT-GENERAL el P&L se
+-- queda sin la bolsa de lo estructural.
+--
+-- El acceso de anon no cambia en nada: esta política es solo para
+-- authenticated con rol de finanzas.
+--
+-- Gestionar los eventos sigue siendo trabajo de la landing, no del panel
+-- financiero: acá no se conceden INSERT ni UPDATE sobre la tabla.
+-- ---------------------------------------------------------------------
+create policy sel_eventos_finanzas on public.eventos
   for select to authenticated
   using ((select finanzas.rol_actual()) is not null);
 
-create policy ins_eventos on public.eventos
-  for insert to authenticated
-  with check ((select finanzas.tiene_rol(array['admin','operaciones']::finanzas.rol_app[])));
-
-create policy upd_eventos on public.eventos
-  for update to authenticated
-  using      ((select finanzas.tiene_rol(array['admin','operaciones']::finanzas.rol_app[])))
-  with check ((select finanzas.tiene_rol(array['admin','operaciones']::finanzas.rol_app[])));
+comment on policy sel_eventos_finanzas on public.eventos is
+  'Aditiva: deja al panel financiero ver todos los eventos, incluidos los ocultos como EVT-GENERAL. No altera el acceso público, que lo resuelve la política propia de la landing.';
 
 -- El calendario es de solo lectura para todos; lo mantiene el owner.
 create policy sel_dim_tiempo on public.dim_tiempo
@@ -81,7 +88,8 @@ declare
   t text;
 begin
   foreach t in array array['cat_fondos','cat_cuentas','cat_metodos','cat_departamentos',
-                           'cat_pcge','cat_contrapartes','cat_items','cat_campanas']
+                           'cat_pcge','cat_contrapartes','cat_items','cat_campanas',
+                           'eventos_atributos']
   loop
     execute format($f$
       create policy sel_%1$s on finanzas.%1$s
@@ -341,12 +349,17 @@ alter default privileges in schema auditoria
 -- lo que nace en public. Sin esto, la clave anon podría borrar eventos
 -- de la landing.
 -- ---------------------------------------------------------------------
-revoke all on public.eventos    from anon, authenticated, service_role;
+-- Los grants de public.eventos se dejan EXACTAMENTE como están: son los
+-- de la landing y cambiarlos es un movimiento en vivo sobre el sitio.
+-- Ver el hallazgo sobre los privilegios de anon en supabase/README.md:
+-- se trata aparte, en su propia ventana, no escondido acá.
+--
+-- dim_tiempo sí es nuestra: solo lectura para todos, la mantiene el owner.
 revoke all on public.dim_tiempo from anon, authenticated, service_role;
-
-grant select                    on public.eventos    to anon;
-grant select, insert, update    on public.eventos    to authenticated, service_role;
-grant select                    on public.dim_tiempo to anon, authenticated, service_role;
+grant select on public.dim_tiempo to anon, authenticated, service_role;
 
 -- La vista cat_eventos hereda la RLS de public.eventos (security_invoker).
-grant select, insert, update on finanzas.cat_eventos to authenticated, service_role;
+-- Solo lectura: ahora es un join con eventos_atributos, así que no es
+-- auto-actualizable, y escribir en la tabla de la landing no es tarea
+-- del panel financiero.
+grant select on finanzas.cat_eventos to authenticated, service_role;

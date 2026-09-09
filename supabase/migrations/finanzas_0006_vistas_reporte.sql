@@ -37,6 +37,7 @@ select
   e.nivel,
   e.ciclo,
   e.estado            as estado_evento,
+  e.tipo              as tipo_evento,
   coalesce(sum(case when m.tipo = 'ingreso' then m.monto_pen end), 0) as ingresos_pen,
   coalesce(sum(case when m.tipo = 'egreso'  then m.monto_pen end), 0) as egresos_pen,
   coalesce(sum(case when m.tipo = 'ingreso' then m.monto_pen
@@ -47,12 +48,14 @@ select
                     else -m.monto_pen end), 0)                       as efecto_caja_pen,
   coalesce(sum(case when m.es_especie then m.monto_pen end), 0)      as especie_pen,
   count(m.id)                                                        as movimientos
-from public.eventos e
+-- Lee el catálogo de finanzas, no la tabla cruda: cat_eventos ya traduce
+-- los nombres reales de la landing y deriva fechas y estado.
+from finanzas.cat_eventos e
 left join finanzas.reg_movimientos m
   on m.evento_id = e.id
  and m.estado = 'activo'
  and m.estado_flujo = 'ejecutado'
-group by e.id, e.nombre, e.juego, e.nivel, e.ciclo, e.estado;
+group by e.id, e.nombre, e.juego, e.nivel, e.ciclo, e.estado, e.tipo;
 
 comment on view finanzas.v_pl_evento is
   'P&L por evento sobre lo ejecutado. resultado_pen incluye canjes (refleja lo consumido); '
@@ -204,7 +207,7 @@ select
   i.descripcion
 from finanzas.reg_impacto i
 join finanzas.cat_contrapartes c on c.id = i.beneficiario_id
-join public.eventos e            on e.id = i.evento_id
+join finanzas.cat_eventos e      on e.id = i.evento_id
 left join public.dim_tiempo t     on t.fecha = i.fecha
 where i.estado = 'activo'
   and i.publicado
